@@ -1,0 +1,2 @@
+-r requirements-web-window.txt
+pyinstaller>=6.19,<7
