@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MTG Deck Viewer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+        background: #101417;
+        color: #f0f3f4;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background:
+          radial-gradient(ellipse at 85% -10%, #27393b 0, transparent 38rem),
+          #101417;
+      }
+
+      main {
+        width: min(1280px, 100%);
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+
+      h1, h2, p { margin-top: 0; }
+      h1 { margin-bottom: 8px; font-size: clamp(1.8rem, 5vw, 2.8rem); }
+      h2 { margin: 30px 0 16px; font-size: 1.25rem; }
+      .type-heading { margin: 24px 0 12px; font-size: 1.05rem; }
+      .intro, .help { color: #aeb9bb; }
+      .panel {
+        margin-top: 28px;
+        padding: 20px;
+        border: 1px solid #354144;
+        border-radius: 14px;
+        background: #191f22e8;
+      }
+
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 220px;
+        padding: 14px;
+        resize: vertical;
+        border: 1px solid #4a5759;
+        border-radius: 8px;
+        background: #0e1214;
+        color: inherit;
+        font: 15px/1.6 Consolas, "Cascadia Code", monospace;
+      }
+
+      button, .file-button {
+        display: inline-flex;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        padding: 0 16px;
+        border: 1px solid #526164;
+        border-radius: 8px;
+        background: #222c2f;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover, .file-button:hover { background: #2e3b3e; }
+      button:focus-visible, .file-button:focus-within, textarea:focus-visible {
+        outline: 2px solid #70d7bd;
+        outline-offset: 2px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .primary {
+        border-color: #42b999;
+        background: #18866b;
+        font-weight: 700;
+      }
+      .primary:hover { background: #209a7b; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+      .status { min-height: 1.5em; margin: 16px 0 0; color: #aeb9bb; }
+      .status.error { color: #ff9a94; }
+      .status.success { color: #8fe1c8; }
+      .section-count { color: #9eabad; font-size: 0.9rem; font-weight: 400; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 18px;
+      }
+
+      .card {
+        overflow: hidden;
+        border: 1px solid #344044;
+        border-radius: 12px;
+        background: #191f22;
+      }
+
+      .image-wrap { position: relative; min-height: 100px; background: #222a2d; }
+      .card-image {
+        display: block;
+        width: 100%;
+        aspect-ratio: 488 / 680;
+        object-fit: cover;
+      }
+
+      .no-image {
+        display: grid;
+        min-height: 180px;
+        place-items: center;
+        padding: 18px;
+        color: #c5cfce;
+        text-align: center;
+      }
+
+      .quantity {
+        position: absolute;
+        top: 9px;
+        left: 9px;
+        padding: 5px 9px;
+        border: 1px solid #ffffff50;
+        border-radius: 999px;
+        background: #101417eF;
+        font-weight: 700;
+      }
+
+      .card-body { padding: 12px; }
+      .card-name { margin-bottom: 5px; font-size: 1rem; font-weight: 700; }
+      .card-with-image .card-name, .card-with-image .card-set,
+      .card-with-image .card-type { display: none; }
+      .card-link { color: inherit; }
+      .card-link:hover { color: #8fe1c8; }
+      .card-link:focus-visible { outline: 2px solid #70d7bd; outline-offset: -2px; }
+      .card-set, .card-type { margin-bottom: 4px; color: #aeb9bb; font-size: 0.85rem; }
+      .card-error { color: #ff9a94; }
+      .empty { color: #9eabad; }
+
+      @media (max-width: 520px) {
+        main { padding: 28px 14px 48px; }
+        .panel { padding: 14px; }
+        .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>MTG Deck Viewer</h1>
+      <p class="intro">デッキリストを読み込み、カード画像を一覧表示します。</p>
+
+      <section class="panel" aria-labelledby="input-heading">
+        <h2 id="input-heading">デッキリスト</h2>
+        <label class="help" for="decklist">MTGAのエクスポート形式や、1行に1種類のリストに対応。例：<code>4 Lightning Bolt</code></label>
+        <textarea id="decklist" spellcheck="false" placeholder="4 Lightning Bolt&#10;2 Island&#10;&#10;Sideboard&#10;2 Negate"></textarea>
+        <div class="actions">
+          <label class="file-button">テキストファイルを選択
+            <input id="file-input" type="file" accept=".txt,text/plain">
+          </label>
+          <button id="sample-button" type="button">サンプルを読み込む</button>
+          <button id="clear-button" type="button">デッキリストをクリア</button>
+          <button id="search-button" class="primary" type="button">カード画像を表示</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <div class="actions">
+        <button id="export-button" type="button" disabled>検索結果をPNGで保存</button>
+      </div>
+      <p id="export-status" class="status" role="status" aria-live="polite"></p>
+      <div id="results"></div>
+    </main>
+    <script>
+      const decklist = document.querySelector("#decklist");
+      const fileInput = document.querySelector("#file-input");
+      const status = document.querySelector("#status");
+      const results = document.querySelector("#results");
+      const searchButton = document.querySelector("#search-button");
+      const exportButton = document.querySelector("#export-button");
+      const exportStatus = document.querySelector("#export-status");
+      let fileReadVersion = 0;
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const version = ++fileReadVersion;
+        try {
+          const text = await file.text();
+          if (version !== fileReadVersion) return;
+          decklist.value = text;
+          status.className = "status";
+          status.textContent = `${file.name} を読み込みました。`;
+        } catch (error) {
+          if (version !== fileReadVersion) return;
+          status.className = "status error";
+          status.textContent = `ファイルを読み込めませんでした: ${error.message}`;
+        }
+      });
+
+      document.querySelector("#sample-button").addEventListener("click", () => {
+        fileReadVersion++;
+        decklist.value = "4 Lightning Bolt\n2 Island\n\nSideboard\n2 Negate";
+        status.className = "status";
+        status.textContent = "サンプルを読み込みました。";
+      });
+
+      document.querySelector("#clear-button").addEventListener("click", () => {
+        fileReadVersion++;
+        fileInput.value = "";
+        decklist.value = "";
+        decklist.focus();
+        if (!searchButton.disabled) {
+          status.className = "status";
+          status.textContent = "デッキリストをクリアしました。検索結果は残っています。";
+        }
+      });
+
+      searchButton.addEventListener("click", async () => {
+        searchButton.disabled = true;
+        exportButton.disabled = true;
+        exportStatus.textContent = "";
+        results.replaceChildren();
+        status.className = "status";
+        status.textContent = "カード情報を検索しています…";
+
+        try {
+          const response = await fetch("/api/deck", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: decklist.value }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            if (response.status === 429) {
+              throw new Error("Scryfallの検索制限に達しました。60秒ほど待ってから再試行してください。");
+            }
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+          renderCards(payload.cards);
+          exportButton.disabled = !payload.cards.length;
+          const missing = payload.cards.filter((entry) => !entry.card).length;
+          status.className = missing ? "status error" : "status success";
+          status.textContent = missing
+            ? `${payload.cards.length}種類を処理しました。${missing}種類は見つかりませんでした。`
+            : `${payload.cards.length}種類のカードを表示しました。`;
+        } catch (error) {
+          status.className = "status error";
+          status.textContent = `検索に失敗しました: ${error.message}`;
+        } finally {
+          searchButton.disabled = false;
+        }
+      });
+
+      exportButton.addEventListener("click", async () => {
+        exportButton.disabled = true;
+        searchButton.disabled = true;
+        exportStatus.className = "status";
+        exportStatus.textContent = "PNG画像を作成しています…";
+        try {
+          const blob = await createResultsPng();
+          const url = URL.createObjectURL(blob);
+          const download = document.createElement("a");
+          download.href = url;
+          download.download = "mtg-deck.png";
+          document.body.append(download);
+          download.click();
+          download.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          exportStatus.className = "status success";
+          exportStatus.textContent = "PNG画像のダウンロードを開始しました。";
+        } catch (error) {
+          exportStatus.className = "status error";
+          exportStatus.textContent = `画像を保存できませんでした: ${error.message}`;
+        } finally {
+          exportButton.disabled = !results.querySelector(".card");
+          searchButton.disabled = false;
+        }
+      });
+
+      function wrapCanvasText(context, text, maxWidth) {
+        const lines = [];
+        for (const paragraph of text.split("\n")) {
+          let line = "";
+          for (const character of paragraph) {
+            if (line && context.measureText(line + character).width > maxWidth) {
+              lines.push(line.trimEnd());
+              line = character.trimStart();
+            } else {
+              line += character;
+            }
+          }
+          if (line) lines.push(line);
+        }
+        return lines;
+      }
+
+      async function loadExportImages(cards) {
+        let next = 0;
+        async function worker() {
+          while (next < cards.length) {
+            const card = cards[next++];
+            if (!card.imageUrl) continue;
+            const image = new Image();
+            image.crossOrigin = "anonymous";
+            image.src = card.imageUrl;
+            try {
+              await image.decode();
+            } catch (error) {
+              throw new Error(`「${card.name}」の画像を読み込めませんでした。通信状態を確認してください。`);
+            }
+            card.image = image;
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(6, cards.length) }, worker));
+      }
+
+      async function createResultsPng() {
+        const sections = [...results.querySelectorAll(":scope > section")].map((section) => ({
+          heading: section.querySelector("h2").textContent,
+          groups: [...section.querySelectorAll(":scope > h3")].map((heading) => ({
+            heading: heading.textContent,
+            cards: [...heading.nextElementSibling.querySelectorAll(".card")].map((card) => ({
+              name: card.querySelector(".card-name").textContent,
+              quantity: card.querySelector(".quantity").textContent,
+              imageUrl: card.querySelector(".card-image")?.src,
+              details: [...card.querySelectorAll(".card-error")]
+                .map((element) => element.textContent).filter(Boolean),
+            })),
+          })),
+        }));
+        const allCards = sections.flatMap((section) => section.groups.flatMap((group) => group.cards));
+        if (!allCards.length) throw new Error("保存する検索結果がありません。");
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("このブラウザーでは画像を作成できません。");
+        const columns = 5;
+        const cardWidth = 180;
+        const imageHeight = 251;
+        const gap = 16;
+        const margin = 24;
+        const width = margin * 2 + columns * cardWidth + (columns - 1) * gap;
+        let height = 60;
+        const rows = [];
+        for (const section of sections) {
+          rows.push({ kind: "section", y: height, text: section.heading });
+          height += 40;
+          for (const group of section.groups) {
+            rows.push({ kind: "group", y: height, text: group.heading });
+            height += 34;
+            for (let offset = 0; offset < group.cards.length; offset += columns) {
+              const rowCards = group.cards.slice(offset, offset + columns);
+              let maxLines = 0;
+              for (const card of rowCards) {
+                context.font = "bold 15px sans-serif";
+                card.nameLines = card.imageUrl ? [] : wrapCanvasText(context, card.name, cardWidth - 20);
+                context.font = "13px sans-serif";
+                card.detailLines = card.details.flatMap((text) => wrapCanvasText(context, text, cardWidth - 20));
+                maxLines = Math.max(maxLines, card.nameLines.length + card.detailLines.length);
+              }
+              const rowHeight = imageHeight + (maxLines ? 12 + maxLines * 19 : 0);
+              rows.push({ kind: "cards", y: height, cards: rowCards, height: rowHeight });
+              height += rowHeight + gap;
+            }
+          }
+        }
+        height += margin;
+        if (height > 32767 || width * height > 40000000) {
+          throw new Error("検索結果が大きすぎて1枚のPNGに保存できません。");
+        }
+
+        await loadExportImages(allCards);
+        canvas.width = width;
+        canvas.height = height;
+        context.fillStyle = "#101417";
+        context.fillRect(0, 0, width, height);
+        context.fillStyle = "#f0f3f4";
+        context.font = "bold 26px sans-serif";
+        context.fillText("MTG Deck Viewer", margin, 36);
+        for (const row of rows) {
+          if (row.kind !== "cards") {
+            context.fillStyle = "#f0f3f4";
+            context.font = row.kind === "section" ? "bold 21px sans-serif" : "bold 17px sans-serif";
+            context.fillText(row.text, margin, row.y + 23);
+            continue;
+          }
+          row.cards.forEach((card, index) => {
+            const x = margin + index * (cardWidth + gap);
+            context.fillStyle = "#191f22";
+            context.fillRect(x, row.y, cardWidth, row.height);
+            if (card.image) {
+              const scale = Math.min(cardWidth / card.image.naturalWidth, imageHeight / card.image.naturalHeight);
+              const imageWidth = card.image.naturalWidth * scale;
+              const imageHeightScaled = card.image.naturalHeight * scale;
+              context.drawImage(card.image, x + (cardWidth - imageWidth) / 2, row.y + (imageHeight - imageHeightScaled) / 2, imageWidth, imageHeightScaled);
+            } else {
+              context.fillStyle = "#aeb9bb";
+              context.font = "14px sans-serif";
+              context.fillText("画像がありません", x + 12, row.y + imageHeight / 2);
+            }
+            context.font = "bold 15px sans-serif";
+            context.fillStyle = "#101417";
+            context.fillRect(x + 6, row.y + 6, context.measureText(card.quantity).width + 20, 25);
+            context.fillStyle = "#8fe1c8";
+            context.fillText(card.quantity, x + 12, row.y + 24);
+            let textY = row.y + imageHeight + 12;
+            context.fillStyle = "#f0f3f4";
+            for (const line of card.nameLines) {
+              textY += 19;
+              context.fillText(line, x + 10, textY);
+            }
+            context.fillStyle = "#aeb9bb";
+            context.font = "13px sans-serif";
+            for (const line of card.detailLines) {
+              textY += 19;
+              context.fillText(line, x + 10, textY);
+            }
+          });
+        }
+        return new Promise((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("PNG画像を生成できませんでした。"));
+          }, "image/png");
+        });
+      }
+
+      function cardTypeOrder(typeLine) {
+        if (!typeLine?.trim()) return 8;
+        const types = typeLine.split("//").flatMap(
+          (face) => face.split("—", 1)[0].trim().toLowerCase().split(/\s+/)
+        );
+        if (types.includes("land")) return 6;
+        if (types.includes("creature")) return 1;
+        const order = ["planeswalker", "creature", "sorcery", "instant", "artifact", "enchantment", "land"];
+        const index = order.findIndex((type) => types.includes(type));
+        return index === -1 ? 7 : index;
+      }
+
+      function renderCards(cards) {
+        const sections = [...new Set(cards.map((entry) => entry.section))];
+        const typeLabels = [
+          "プレインズウォーカー", "クリーチャー", "ソーサリー", "インスタント",
+          "アーティファクト", "エンチャント", "土地", "その他", "タイプ不明",
+        ];
+        const sectionLabels = {
+          Mainboard: "メインボード",
+          Sideboard: "サイドボード",
+          Commander: "統率者",
+          Companion: "相棒",
+        };
+        for (const sectionName of sections) {
+          const sectionCards = cards.filter((entry) => entry.section === sectionName);
+          if (!sectionCards.length) continue;
+          sectionCards.sort((a, b) => cardTypeOrder(a.card?.type) - cardTypeOrder(b.card?.type));
+
+          const section = document.createElement("section");
+          const heading = document.createElement("h2");
+          heading.textContent = sectionLabels[sectionName] || sectionName;
+          const count = document.createElement("span");
+          count.className = "section-count";
+          count.textContent = `（${sectionCards.reduce((sum, entry) => sum + entry.quantity, 0)}枚）`;
+          heading.append(count);
+
+          section.append(heading);
+          for (let typeIndex = 0; typeIndex < typeLabels.length; typeIndex++) {
+            const typeCards = sectionCards.filter((entry) => cardTypeOrder(entry.card?.type) === typeIndex);
+            if (!typeCards.length) continue;
+
+            const typeHeading = document.createElement("h3");
+            typeHeading.className = "type-heading";
+            typeHeading.textContent = typeLabels[typeIndex];
+            const typeCount = document.createElement("span");
+            typeCount.className = "section-count";
+            typeCount.textContent = `（${typeCards.reduce((sum, entry) => sum + entry.quantity, 0)}枚）`;
+            typeHeading.append(typeCount);
+
+            const grid = document.createElement("div");
+            grid.className = "grid";
+            for (const entry of typeCards) grid.append(createCard(entry));
+            section.append(typeHeading, grid);
+          }
+          results.append(section);
+        }
+      }
+
+      function createCard(entry) {
+        const card = document.createElement("article");
+        card.className = "card";
+        if (entry.card?.image_url) card.classList.add("card-with-image");
+        const url = scryfallUrl(entry.card?.scryfall_url);
+        const imageWrap = document.createElement("div");
+        imageWrap.className = "image-wrap";
+        const quantity = document.createElement("span");
+        quantity.className = "quantity";
+        quantity.textContent = `×${entry.quantity}`;
+        imageWrap.append(quantity);
+
+        if (entry.card?.image_url) {
+          const image = document.createElement("img");
+          image.className = "card-image";
+          image.src = entry.card.image_url;
+          image.alt = entry.card.name || entry.name;
+          image.loading = "lazy";
+          if (url) {
+            const imageLink = createScryfallLink(url);
+            imageLink.setAttribute("aria-label", `${image.alt} をScryfallで開く（新しいタブ）`);
+            imageLink.append(image);
+            imageWrap.prepend(imageLink);
+          } else {
+            imageWrap.prepend(image);
+          }
+        } else {
+          const placeholder = document.createElement("div");
+          placeholder.className = "no-image";
+          placeholder.textContent = entry.error || "画像がありません";
+          imageWrap.prepend(placeholder);
+        }
+
+        const body = document.createElement("div");
+        body.className = "card-body";
+        const name = document.createElement("p");
+        name.className = "card-name";
+        if (url) {
+          const nameLink = createScryfallLink(url);
+          nameLink.textContent = entry.card?.name || entry.name;
+          nameLink.setAttribute("aria-label", `${nameLink.textContent} をScryfallで開く（新しいタブ）`);
+          name.append(nameLink);
+        } else {
+          name.textContent = entry.card?.name || entry.name;
+        }
+        body.append(name);
+
+        if (entry.card) {
+          const set = document.createElement("p");
+          set.className = "card-set";
+          set.textContent = entry.card.set || "";
+          const type = document.createElement("p");
+          type.className = "card-type";
+          type.textContent = entry.card.type || "";
+          body.append(set, type);
+          if (!url) {
+            const warning = document.createElement("p");
+            warning.className = "card-error";
+            warning.textContent = "Scryfallのリンクを取得できませんでした。";
+            body.append(warning);
+          }
+        } else {
+          const error = document.createElement("p");
+          error.className = "card-error";
+          error.textContent = entry.error;
+          body.append(error);
+        }
+
+        if (entry.card?.image_url && url) body.hidden = true;
+        card.append(imageWrap, body);
+        return card;
+      }
+
+      function scryfallUrl(value) {
+        if (typeof value !== "string") return null;
+        try {
+          const url = new URL(value);
+          return url.protocol === "https:" && url.hostname === "scryfall.com" ? url.href : null;
+        } catch (error) {
+          if (!(error instanceof TypeError)) throw error;
+          return null;
+        }
+      }
+
+      function createScryfallLink(url) {
+        const link = document.createElement("a");
+        link.className = "card-link";
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        return link;
+      }
+    </script>
+  </body>
+</html>
