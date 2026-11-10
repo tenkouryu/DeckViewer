@@ -1,0 +1,1 @@
+"""MTG deck viewer application."""
