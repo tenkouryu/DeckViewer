@@ -34,3 +34,10 @@ src/mtg/__pycache__/mtg_web_window.cpython-314.pyc
 src/tests/__pycache__/__init__.cpython-314.pyc
 src/tests/__pycache__/test_mtg_deck_viewer.cpython-314.pyc
 src/tests/__pycache__/test_mtg_web_window.cpython-314.pyc
+Src/mtg/__pycache__/__init__.cpython-314.pyc
+Src/mtg/__pycache__/mtg_card_search.cpython-314.pyc
+Src/mtg/__pycache__/mtg_deck_viewer.cpython-314.pyc
+Src/mtg/__pycache__/mtg_web_window.cpython-314.pyc
+Src/tests/__pycache__/__init__.cpython-314.pyc
+Src/tests/__pycache__/test_mtg_deck_viewer.cpython-314-pytest-9.2.0.pyc
+Src/tests/__pycache__/test_mtg_web_window.cpython-314-pytest-9.2.0.pyc
