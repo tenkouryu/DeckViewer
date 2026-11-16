@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>カードプレビュー - MTG Deck Viewer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+        background: #101417;
+        color: #f0f3f4;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        display: flex;
+        height: 100vh;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        background: #101417;
+      }
+      #card-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      #card-image[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <img id="card-image" alt="" hidden>
+    <script>
+      const cardImage = document.querySelector("#card-image");
+
+      cardImage.addEventListener("error", () => {
+        cardImage.hidden = true;
+      });
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== window.location.origin || event.source !== window.opener) return;
+        if (event.data?.type === "card-preview") showCard(event.data.card);
+      });
+
+      window.addEventListener("load", () => {
+        window.opener?.postMessage({ type: "card-preview-ready" }, window.location.origin);
+      });
+
+      function showCard(card) {
+        if (!card || typeof card.name !== "string") return;
+        let imageUrl = null;
+        try {
+          const parsed = new URL(card.imageUrl);
+          if (parsed.protocol === "https:" && parsed.hostname.endsWith(".scryfall.io")) {
+            imageUrl = parsed.href;
+          }
+        } catch (error) {
+          if (!(error instanceof TypeError)) throw error;
+        }
+
+        cardImage.hidden = !imageUrl;
+        cardImage.alt = imageUrl ? card.name : "";
+        if (imageUrl) cardImage.src = imageUrl;
+      }
+    </script>
+  </body>
+</html>

@@ -46,15 +46,22 @@ def summarize_face(face: dict) -> dict:
         "name": face.get("name"),
         "type": face.get("type_line"),
         "rules_text": face.get("oracle_text"),
+        "printed_name": face.get("printed_name"),
+        "printed_type": face.get("printed_type_line"),
+        "printed_rules_text": face.get("printed_text"),
         "image_url": images.get("normal"),
     }
 
 
 def summarize_card(card: dict) -> dict:
     result = {
+        "oracle_id": card.get("oracle_id"),
         "name": card.get("name"),
         "type": card.get("type_line"),
         "rules_text": card.get("oracle_text"),
+        "printed_name": card.get("printed_name"),
+        "printed_type": card.get("printed_type_line"),
+        "printed_rules_text": card.get("printed_text"),
         "set": card.get("set_name"),
         "image_url": image_url(card),
     }
@@ -186,6 +193,29 @@ def search_cards(query: str, limit: int | None) -> list[dict]:
         url = page.get("next_page") if page.get("has_more") else None
 
     return cards
+
+
+def fetch_japanese_cards(oracle_ids: list[str]) -> dict[str, dict]:
+    cards_by_oracle_id = {}
+    for offset in range(0, len(oracle_ids), 25):
+        if offset:
+            time.sleep(0.1)
+        batch = oracle_ids[offset : offset + 25]
+        query = " OR ".join(f"lang:ja oracleid:{oracle_id}" for oracle_id in batch)
+        for card in search_cards(query, limit=None):
+            oracle_id = card.get("oracle_id")
+            if oracle_id and (
+                card.get("printed_name")
+                or card.get("printed_type")
+                or card.get("printed_rules_text")
+            ):
+                cards_by_oracle_id[oracle_id] = {
+                    "name": card.get("printed_name") or card["name"],
+                    "type": card.get("printed_type") or card.get("type"),
+                    "rules_text": card.get("printed_rules_text") or card.get("rules_text"),
+                    "image_url": card.get("image_url"),
+                }
+    return cards_by_oracle_id
 
 
 def main() -> int:

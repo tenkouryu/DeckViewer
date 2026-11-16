@@ -8,8 +8,9 @@ import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from uuid import UUID
 
-from .mtg_card_search import fetch_cards_by_identifiers
+from .mtg_card_search import fetch_cards_by_identifiers, fetch_japanese_cards
 
 
 HOST = "127.0.0.1"
@@ -147,6 +148,7 @@ def resolve_deck(cards: list[dict]) -> list[dict]:
 
 class DeckViewerHandler(BaseHTTPRequestHandler):
     page_path = Path(__file__).resolve().parent.parent.parent / "mtg_deck_viewer.html"
+    preview_page_path = Path(__file__).resolve().parent.parent.parent / "card_preview.html"
 
     def send_json(self, status: int, payload: dict | list) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -162,12 +164,16 @@ class DeckViewerHandler(BaseHTTPRequestHandler):
             self.send_response(204)
             self.end_headers()
             return
-        if self.path != "/":
+        page_path = {
+            "/": self.page_path,
+            "/preview": self.preview_page_path,
+        }.get(self.path)
+        if page_path is None:
             self.send_error(404)
             return
 
         try:
-            body = self.page_path.read_bytes()
+            body = page_path.read_bytes()
         except OSError as error:
             self.send_json(500, {"error": f"Could not read the app page: {error}"})
             return
@@ -179,7 +185,7 @@ class DeckViewerHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:
-        if self.path != "/api/deck":
+        if self.path not in {"/api/deck", "/api/translations"}:
             self.send_error(404)
             return
 
@@ -188,24 +194,41 @@ class DeckViewerHandler(BaseHTTPRequestHandler):
             if content_length < 1 or content_length > MAX_REQUEST_BYTES:
                 raise ValueError("The deck-list file must be smaller than 512 KB.")
             payload = json.loads(self.rfile.read(content_length))
-            text = payload.get("text") if isinstance(payload, dict) else None
-            if not isinstance(text, str):
-                raise ValueError("The request must contain deck-list text.")
-            cards = parse_decklist(text)
-            if not cards:
-                raise ValueError("No cards found. Check the deck-list format.")
+            if self.path == "/api/deck":
+                text = payload.get("text") if isinstance(payload, dict) else None
+                if not isinstance(text, str):
+                    raise ValueError("The request must contain deck-list text.")
+                cards = parse_decklist(text)
+                if not cards:
+                    raise ValueError("No cards found. Check the deck-list format.")
+            else:
+                oracle_ids = payload.get("oracle_ids") if isinstance(payload, dict) else None
+                if (
+                    not isinstance(oracle_ids, list)
+                    or len(oracle_ids) > MAX_UNIQUE_CARDS
+                    or any(not isinstance(oracle_id, str) for oracle_id in oracle_ids)
+                ):
+                    raise ValueError("The request must contain at most 300 card IDs.")
+                oracle_ids = list(dict.fromkeys(str(UUID(oracle_id)) for oracle_id in oracle_ids))
         except (ValueError, json.JSONDecodeError) as error:
             self.send_json(400, {"error": str(error)})
             return
 
         try:
-            results = resolve_deck(cards)
+            results = (
+                resolve_deck(cards)
+                if self.path == "/api/deck"
+                else {"translations": fetch_japanese_cards(oracle_ids)}
+            )
         except (RuntimeError, KeyError) as error:
             status = 429 if "returned HTTP 429" in str(error) else 502
             self.send_json(status, {"error": str(error)})
             return
 
-        self.send_json(200, {"cards": results})
+        self.send_json(
+            200,
+            {"cards": results} if self.path == "/api/deck" else results,
+        )
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"{self.address_string()} - {format % args}", file=sys.stderr)

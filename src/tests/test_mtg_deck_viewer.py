@@ -7,7 +7,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from mtg.mtg_card_search import fetch_cards_by_identifiers, summarize_card
+from mtg.mtg_card_search import fetch_cards_by_identifiers, fetch_japanese_cards, summarize_card
 from mtg.mtg_deck_viewer import DeckViewerHandler, parse_decklist
 
 
@@ -99,7 +99,38 @@ class DeckApiTests(unittest.TestCase):
     def test_serves_browser_page(self):
         with urlopen(f"http://127.0.0.1:{self.server.server_port}/", timeout=5) as response:
             self.assertEqual(response.status, 200)
-            self.assertIn(b"MTG Deck Viewer", response.read())
+            page = response.read()
+            self.assertIn(b"MTG Deck Viewer", page)
+            self.assertNotIn(b"sample-button", page)
+            self.assertIn(b"english-button", page)
+            self.assertIn(b"japanese-button", page)
+
+    def test_serves_card_preview_page(self):
+        with urlopen(f"http://127.0.0.1:{self.server.server_port}/preview", timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            self.assertIn(b"card-preview-ready", response.read())
+
+    @patch("mtg.mtg_deck_viewer.fetch_japanese_cards")
+    def test_japanese_translations_endpoint_validates_ids(self, fetch):
+        fetch.return_value = {"id": {"name": "稲妻"}}
+        request = Request(
+            f"http://127.0.0.1:{self.server.server_port}/api/translations",
+            data=json.dumps({"oracle_ids": ["12345678-1234-5678-1234-567812345678"]}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(request, timeout=5) as response:
+            self.assertEqual(json.load(response), {"translations": {"id": {"name": "稲妻"}}})
+        fetch.assert_called_once_with(["12345678-1234-5678-1234-567812345678"])
+
+        invalid_request = Request(
+            f"http://127.0.0.1:{self.server.server_port}/api/translations",
+            data=json.dumps({"oracle_ids": ["not-an-id"]}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with self.assertRaises(HTTPError) as context:
+            urlopen(invalid_request, timeout=5)
+        self.assertEqual(context.exception.code, 400)
+        context.exception.close()
 
     @patch("mtg.mtg_deck_viewer.fetch_cards_by_identifiers")
     def test_arena_identifier_and_missing_card(self, fetch):
@@ -196,6 +227,37 @@ class DeckApiTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    @patch("mtg.mtg_card_search.search_cards")
+    def test_fetch_japanese_cards_returns_printed_fields(self, search):
+        oracle_ids = [
+            f"00000000-0000-0000-0000-{number:012x}"
+            for number in range(1, 26)
+        ]
+        oracle_id = oracle_ids[0]
+        search.return_value = [
+            {
+                "oracle_id": oracle_id,
+                "name": "Lightning Bolt",
+                "type": "Instant",
+                "printed_name": "稲妻",
+                "printed_type": "インスタント",
+                "printed_rules_text": "クリーチャー1体を対象とする。",
+                "image_url": "https://example.test/card.jpg",
+            }
+        ]
+        result = fetch_japanese_cards(oracle_ids)
+        self.assertEqual(
+            result[oracle_id],
+            {
+                "name": "稲妻",
+                "type": "インスタント",
+                "rules_text": "クリーチャー1体を対象とする。",
+                "image_url": "https://example.test/card.jpg",
+            },
+        )
+        query = " OR ".join(f"lang:ja oracleid:{card_id}" for card_id in oracle_ids)
+        search.assert_called_once_with(query, limit=None)
+
     @patch("mtg.mtg_card_search.urlopen")
     def test_collection_preserves_printing_page_url(self, open_url):
         card = {

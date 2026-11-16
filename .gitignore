@@ -41,3 +41,5 @@ Src/mtg/__pycache__/mtg_web_window.cpython-314.pyc
 Src/tests/__pycache__/__init__.cpython-314.pyc
 Src/tests/__pycache__/test_mtg_deck_viewer.cpython-314-pytest-9.2.0.pyc
 Src/tests/__pycache__/test_mtg_web_window.cpython-314-pytest-9.2.0.pyc
+Src/tests/__pycache__/test_mtg_deck_viewer.cpython-314.pyc
+Src/tests/__pycache__/test_mtg_web_window.cpython-314.pyc
